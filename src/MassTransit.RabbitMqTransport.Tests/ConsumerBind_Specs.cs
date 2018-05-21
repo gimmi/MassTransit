@@ -20,7 +20,6 @@ namespace MassTransit.RabbitMqTransport.Tests
         using NUnit.Framework;
         using RabbitMQ.Client;
         using Saga;
-        using TestFramework;
 
 
         public class ConsumerBindingTestFixture :
@@ -202,7 +201,6 @@ namespace MassTransit.RabbitMqTransport.Tests
                 await saga.B.Task;
             }
 
-            TestSaga _testSaga;
             InMemorySagaRepository<TestSaga> _repository;
             Guid _sagaId;
 

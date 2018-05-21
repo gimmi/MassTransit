@@ -17,7 +17,6 @@ namespace MassTransit.RabbitMqTransport.Topology.Topologies
     using System.Linq;
     using System.Text;
     using Builders;
-    using Configurators;
     using GreenPipes;
     using MassTransit.Topology;
     using MassTransit.Topology.Topologies;
@@ -80,6 +79,20 @@ namespace MassTransit.RabbitMqTransport.Topology.Topologies
             var exchangeType = ExchangeTypeSelector.DefaultExchangeType;
 
             var specification = new ExchangeBindingConsumeTopologySpecification(exchangeName, exchangeType);
+
+            configure?.Invoke(specification);
+
+            _specifications.Add(specification);
+        }
+
+        public void BindQueue(string exchangeName, string queueName, Action<IQueueBindingConfigurator> configure = null)
+        {
+            if (string.IsNullOrWhiteSpace(exchangeName))
+                throw new ArgumentException("Value cannot be null or whitespace.", nameof(exchangeName));
+
+            var exchangeType = ExchangeTypeSelector.DefaultExchangeType;
+
+            var specification = new ExchangeToQueueBindingConsumeTopologySpecification(exchangeName, exchangeType, queueName);
 
             configure?.Invoke(specification);
 

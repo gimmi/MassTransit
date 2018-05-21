@@ -12,15 +12,14 @@
 // specific language governing permissions and limitations under the License.
 namespace MassTransit.PipeConfigurators
 {
-    using System;
     using System.Collections.Generic;
+    using System.Threading;
     using Context;
     using GreenPipes;
     using GreenPipes.Configurators;
     using GreenPipes.Observers;
     using GreenPipes.Specifications;
     using Pipeline.Filters;
-    using Util;
 
 
     public class RedeliveryRetryPipeSpecification<TMessage> :
@@ -41,10 +40,14 @@ namespace MassTransit.PipeConfigurators
         {
             var retryPolicy = _policyFactory(Filter);
 
-            var policy = new ConsumeContextRetryPolicy<ConsumeContext<TMessage>, RetryConsumeContext<TMessage>>(retryPolicy,
-                x => x as RetryConsumeContext<TMessage> ?? new RedeliveryRetryConsumeContext<TMessage>(x));
+            var policy = new ConsumeContextRetryPolicy<ConsumeContext<TMessage>, RetryConsumeContext<TMessage>>(retryPolicy, CancellationToken.None, Factory);
 
             builder.AddFilter(new RedeliveryRetryFilter<TMessage>(policy, _observers));
+        }
+
+        static RetryConsumeContext<TMessage> Factory(ConsumeContext<TMessage> context, IRetryPolicy retryPolicy)
+        {
+            return context as RetryConsumeContext<TMessage> ?? new RedeliveryRetryConsumeContext<TMessage>(context, retryPolicy);
         }
 
         public IEnumerable<ValidationResult> Validate()
@@ -61,23 +64,6 @@ namespace MassTransit.PipeConfigurators
         ConnectHandle IRetryObserverConnector.ConnectRetryObserver(IRetryObserver observer)
         {
             return _observers.Connect(observer);
-        }
-    }
-
-
-    public class RedeliveryRetryConsumeContext<T> :
-        RetryConsumeContext<T>
-        where T : class
-    {
-        public RedeliveryRetryConsumeContext(ConsumeContext<T> context)
-            : base(context)
-        {
-        }
-
-        public override TContext CreateNext<TContext>()
-        {
-            return this as TContext
-                ?? throw new ArgumentException($"The context type is not valid: {TypeMetadataCache<T>.ShortName}");
         }
     }
 }

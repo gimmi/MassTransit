@@ -1,4 +1,4 @@
-﻿// Copyright 2007-2016 Chris Patterson, Dru Sellers, Travis Smith, et. al.
+﻿// Copyright 2007-2018 Chris Patterson, Dru Sellers, Travis Smith, et. al.
 //  
 // Licensed under the Apache License, Version 2.0 (the "License"); you may not use
 // this file except in compliance with the License. You may obtain a copy of the 
@@ -13,6 +13,7 @@
 namespace MassTransit.Pipeline.Filters
 {
     using System;
+    using System.Threading;
     using System.Threading.Tasks;
     using Context;
     using GreenPipes;
@@ -24,11 +25,19 @@ namespace MassTransit.Pipeline.Filters
     {
         readonly RetryConsumeContext _context;
         readonly RetryPolicyContext<ConsumeContext> _policyContext;
+        CancellationToken _cancellationToken;
+        CancellationTokenRegistration _registration;
 
-        public ConsumeContextRetryPolicyContext(RetryPolicyContext<ConsumeContext> policyContext, RetryConsumeContext context)
+        public ConsumeContextRetryPolicyContext(RetryPolicyContext<ConsumeContext> policyContext, RetryConsumeContext context, CancellationToken cancellationToken)
         {
             _policyContext = policyContext;
             _context = context;
+            _cancellationToken = cancellationToken;
+        }
+
+        public void Cancel()
+        {
+            _policyContext.Cancel();
         }
 
         public ConsumeContext Context => _context;
@@ -37,7 +46,10 @@ namespace MassTransit.Pipeline.Filters
         {
             var canRetry = _policyContext.CanRetry(exception, out RetryContext<ConsumeContext> policyRetryContext);
             if (canRetry)
+            {
                 _context.LogRetry(exception);
+                _registration = _cancellationToken.Register(Cancel);
+            }
 
             retryContext = new ConsumeContextRetryContext(policyRetryContext, canRetry ? _context.CreateNext() : _context);
 
@@ -48,6 +60,12 @@ namespace MassTransit.Pipeline.Filters
         {
             return Task.WhenAll(_context.NotifyPendingFaults(), _policyContext.RetryFaulted(exception));
         }
+
+        public void Dispose()
+        {
+            _registration.Dispose();
+            _policyContext.Dispose();
+        }
     }
 
 
@@ -57,12 +75,20 @@ namespace MassTransit.Pipeline.Filters
         where TContext : RetryConsumeContext, TFilter
     {
         readonly TContext _context;
+        CancellationToken _cancellationToken;
         readonly RetryPolicyContext<TFilter> _policyContext;
+        CancellationTokenRegistration _registration;
 
-        public ConsumeContextRetryPolicyContext(RetryPolicyContext<TFilter> policyContext, TContext context)
+        public ConsumeContextRetryPolicyContext(RetryPolicyContext<TFilter> policyContext, TContext context, CancellationToken cancellationToken)
         {
             _policyContext = policyContext;
             _context = context;
+            _cancellationToken = cancellationToken;
+        }
+
+        public void Cancel()
+        {
+            _policyContext.Cancel();
         }
 
         public TFilter Context => _context;
@@ -70,9 +96,11 @@ namespace MassTransit.Pipeline.Filters
         public bool CanRetry(Exception exception, out RetryContext<TFilter> retryContext)
         {
             var canRetry = _policyContext.CanRetry(exception, out RetryContext<TFilter> policyRetryContext);
-
             if (canRetry)
+            {
                 _context.LogRetry(exception);
+                _registration = _cancellationToken.Register(Cancel);
+            }
 
             retryContext = new ConsumeContextRetryContext<TFilter, TContext>(policyRetryContext, canRetry ? _context.CreateNext<TContext>() : _context);
 
@@ -82,6 +110,12 @@ namespace MassTransit.Pipeline.Filters
         public Task RetryFaulted(Exception exception)
         {
             return Task.WhenAll(_context.NotifyPendingFaults(), _policyContext.RetryFaulted(exception));
+        }
+
+        public void Dispose()
+        {
+            _registration.Dispose();
+            _policyContext.Dispose();
         }
     }
 }
